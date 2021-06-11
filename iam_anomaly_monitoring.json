@@ -1,0 +1,27 @@
+{
+    "timeout": "3600s",
+    "steps": [
+        {
+            "name": "gcr.io/google.com/cloudsdktool/cloud-sdk:latest",
+            "entrypoint": "git",
+            "args": [
+                "clone",
+                "--branch=${_BRANCH_NAME}",
+                "https://github.com/vwt-digital/odh-iam-monitoring.git"
+            ]
+        },
+        {
+            "name": "gcr.io/google.com/cloudsdktool/cloud-sdk:latest",
+            "entrypoint": "bash",
+            "args": [
+                "-c",
+                "pip install virtualenv==16.7.9 && virtualenv -p python3 venv && source venv/bin/activate && pip install -r requirements.txt && python3 iam_anomaly_monitoring.py -p ${_PARENT_ID}"
+            ],
+            "dir": "odh-iam-monitoring/scripts"
+        }
+    ],
+    "substitutions": {
+        "_BRANCH_NAME": "__BRANCH_NAME__",
+        "_PARENT_ID": "__PARENT_ID__"
+    }
+}
