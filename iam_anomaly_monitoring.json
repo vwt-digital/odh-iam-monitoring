@@ -15,13 +15,14 @@
             "entrypoint": "bash",
             "args": [
                 "-c",
-                "pip install virtualenv==16.7.9 && virtualenv -p python3 venv && source venv/bin/activate && pip install -r requirements.txt && python3 iam_anomaly_monitoring.py -p ${_PARENT_ID}"
+                "pip install virtualenv==16.7.9 && virtualenv -p python3 venv && source venv/bin/activate && pip install -r requirements.txt && python3 iam_anomaly_monitoring.py -p ${_PARENT_ID} -t ${_PUBSUB_TOPIC}"
             ],
             "dir": "odh-iam-monitoring/scripts"
         }
     ],
     "substitutions": {
         "_BRANCH_NAME": "__BRANCH_NAME__",
-        "_PARENT_ID": "__PARENT_ID__"
+        "_PARENT_ID": "__PARENT_ID__",
+        "_PUBSUB_TOPIC": "__PUBSUB_TOPIC__"
     }
 }

@@ -1,8 +1,11 @@
 import argparse
+import json
 import re
 from datetime import datetime, timedelta
 
 import googleapiclient.discovery
+from gobits import Gobits
+from google.cloud import pubsub
 from oauth2client.client import GoogleCredentials
 
 policy_version = 3  # See https://cloud.google.com/iam/docs/policies#versions
@@ -25,6 +28,11 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Monitor IAM anomalies")
     parser.add_argument(
         "-p", "--parent-id", required=True, help="id of the parent GCP project"
+    )
+    parser.add_argument(
+        "-t",
+        "--pubsub-topic",
+        help="name of the Pub/Sub Topic to post anomalies to (format: 'projects/<PROJECT_ID>/topics/<TOPIC_ID>')",
     )
     return parser.parse_args()
 
@@ -85,16 +93,46 @@ def monitor_iam_policies(project_id, iam_service):
                 )
                 project_anomalies.append(
                     {
-                        "role": binding["role"],
-                        "user": member.replace("user:", ""),
                         "project_id": project_id,
-                        "found_at": datetime.strftime(
+                        "reported_at": datetime.strftime(
                             datetime.utcnow(), "%Y-%m-%dT%H:%M:%SZ"
                         ),
+                        "role": binding["role"],
+                        "member": member,
                     }
                 )
 
     return project_anomalies
+
+
+def publish_to_topic(message, pubsub_project, pubsub_topic, gobits):
+    """
+    Publish message to topic
+
+    :param message: message to publish
+    :type message: list
+    :param pubsub_project: Pub/Sub Topic project
+    :type pubsub_project: str
+    :param pubsub_topic: Pub/Sub Topic project name
+    :type pubsub_topic: str
+    :param gobits: Gobits object
+    :type gobits: dict
+    """
+
+    # Initiate Pub/Sub Client
+    publish_client = pubsub.PublisherClient()
+    topic = f"projects/{pubsub_project}/topics/{pubsub_topic}"
+
+    # Create message to publish
+    msg_to_publish = {"gobits": [gobits], "iam_anomalies": message}
+
+    # Publish message
+    future = publish_client.publish(topic, json.dumps(msg_to_publish).encode("utf-8"))
+    message_id = future.result()
+
+    print(
+        f"Successfully published {len(message)} anomalies to topic '{topic}' with ID '{message_id}'"
+    )
 
 
 def main(args):
@@ -122,6 +160,25 @@ def main(args):
             request = iam_service.projects().list_next(
                 previous_request=request, previous_response=response
             )
+
+    if len(iam_anomalies) > 0 and args.pubsub_topic:
+        pubsub_topic_match = re.match(
+            r"^projects/([a-zA-Z0-9-]*)/topics/([a-zA-Z0-9-]*)$", args.pubsub_topic
+        )
+        if not pubsub_topic_match:
+            print("Incorrect Pub/Sub Topic passed along, skipping publishing")
+            return
+
+        # Set metadata object
+        metadata = Gobits().to_json()
+
+        # Publish anomalies towards Pub/Sub Topic
+        publish_to_topic(
+            message=iam_anomalies,
+            pubsub_project=pubsub_topic_match.group(1),
+            pubsub_topic=pubsub_topic_match.group(2),
+            gobits=metadata,
+        )
 
 
 if __name__ == "__main__":
